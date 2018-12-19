@@ -45,58 +45,61 @@ if not sysset:
 
 for loc in us_systems:
     for sys in [s for s in us_systems[loc] if s in sysset]:
-        badhost = False
-        epsg = None  # from calculated local UTM zone
-        url = us_systems[loc][sys]['Auto-Discovery URL']
-        print('{} {}'.format(sys, loc))
         try:
-            r = requests.get(url, timeout=1).json()
-        except requests.exceptions.RequestException as e:
-            badhost = True
-        if badhost is True:
-            print('Bad response from {}'.format(url))
-        # TODO handle missing status or info urls
-        else:
-            status_url = next(item for item in r['data']['en']['feeds'] if
-                              item['name'] == 'station_status')['url']
-            info_url = next(item for item in r['data']['en']['feeds'] if
-                            item['name'] == 'station_information')['url']
+            badhost = False
+            epsg = None  # from calculated local UTM zone
+            url = us_systems[loc][sys]['Auto-Discovery URL']
+            print('{} {}'.format(sys, loc))
             try:
-                status = requests.get(status_url,
-                                      timeout=1).json()['data']['stations']
+                r = requests.get(url, timeout=1).json()
             except requests.exceptions.RequestException as e:
                 badhost = True
             if badhost is True:
-                print('Bad response from {}'.format(status_url))
+                print('Bad response from {}'.format(url))
+            # TODO handle missing status or info urls
             else:
-                stations = {}
-                for station in [station for station in status if
-                                station['is_installed'] == 1]:
-                    stations[station['station_id']] = {}
-                print('...{} installed stations found'.format(len(stations)))
+                status_url = next(item for item in r['data']['en']['feeds'] if
+                                  item['name'] == 'station_status')['url']
+                info_url = next(item for item in r['data']['en']['feeds'] if
+                                item['name'] == 'station_information')['url']
                 try:
-                    info = requests.get(info_url,
-                                        timeout=1).json()['data']['stations']
+                    status = requests.get(status_url,
+                                          timeout=1).json()['data']['stations']
                 except requests.exceptions.RequestException as e:
                     badhost = True
                 if badhost is True:
-                    print('Bad response from {}'.format(info_url))
+                    print('Bad response from {}'.format(status_url))
                 else:
-                    for station in [station for station in info if
-                                    station['station_id'] in stations]:
-                        lat, lon = float(station['lat']), float(station['lon'])
-                        if not epsg:
-                            epsg = utm_from_latlng(lat, lon)
-                            print('epsg: {}'.format(epsg))
-                        x, y = pyproj.transform(pyproj.Proj(init='epsg:4326'),
-                                                pyproj.Proj(init='epsg:{}'.format(epsg)),
-                                                                                  lon, lat)
-                        stations[station['station_id']] = {'x': x, 'y': y}
-                    us_systems[loc][sys]['X'] = [v['x'] for k, v in stations.items()]
-                    us_systems[loc][sys]['Y'] = [v['y'] for k, v in stations.items()]
-                    us_systems[loc][sys]['N'] = len(stations)
-                    us_systems[loc][sys]['epsg'] = epsg
-                    sysstats.append((len(stations), loc, sys))
+                    stations = {}
+                    for station in [station for station in status if
+                                    station['is_installed'] == 1]:
+                        stations[station['station_id']] = {}
+                    print('...{} installed stations found'.format(len(stations)))
+                    try:
+                        info = requests.get(info_url,
+                                            timeout=1).json()['data']['stations']
+                    except requests.exceptions.RequestException as e:
+                        badhost = True
+                    if badhost is True:
+                        print('Bad response from {}'.format(info_url))
+                    else:
+                        for station in [station for station in info if
+                                        station['station_id'] in stations]:
+                            lat, lon = float(station['lat']), float(station['lon'])
+                            if not epsg:
+                                epsg = utm_from_latlng(lat, lon)
+                                print('epsg: {}'.format(epsg))
+                            x, y = pyproj.transform(pyproj.Proj(init='epsg:4326'),
+                                                    pyproj.Proj(init='epsg:{}'.format(epsg)),
+                                                                                      lon, lat)
+                            stations[station['station_id']] = {'x': x, 'y': y}
+                        us_systems[loc][sys]['X'] = [v['x'] for k, v in stations.items()]
+                        us_systems[loc][sys]['Y'] = [v['y'] for k, v in stations.items()]
+                        us_systems[loc][sys]['N'] = len(stations)
+                        us_systems[loc][sys]['epsg'] = epsg
+                        sysstats.append((len(stations), loc, sys))
+        except Exception as e:
+            print('Something went awry!')
 
 top_sys = sorted(sysstats, reverse=True)
 print(top_sys)
@@ -105,12 +108,12 @@ plt.figure(figsize=(11, 8.5))
 i = 0
 for (n, loc, sys) in top_sys[:n_top]:
     i += 1
-    #print('{:0f} x {:0f} meters'.format(max(Y) - min(Y), max(X) - min(X)))
+    print('{:0f} x {:0f} meters'.format(max(Y) - min(Y), max(X) - min(X)))
     X = us_systems[loc][sys]['X']
     Y = us_systems[loc][sys]['Y']
     ax = plt.subplot(ceil(n_top / 3), 3, i, aspect='equal')
     plt.scatter(X, Y, c='black', alpha=0.25)
-    xmar = (20000 - (max(X) - min(X))) / 2
+    xmar = (50000 - (max(X) - min(X))) / 2
     ymar = (40000 - (max(Y) - min(Y))) / 2
     plt.xlim(min(X) - xmar, max(X) + xmar)
     plt.ylim(min(Y) - ymar, max(Y) + ymar)
